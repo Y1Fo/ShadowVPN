@@ -1,3 +1,10 @@
+shadowvpn (0.2.1-1) unstable; urgency=low
+
+  * Fix checksum missmatch on server side.
+
+ -- rains <rains31@gmail.com>  Sat, 06 Dec 2015 12:53:30 +0800
+
+
 shadowvpn (0.2.0-1) unstable; urgency=low
 
   * Add NAT support on server side
