@@ -26,10 +26,15 @@
 static unsigned char key[32];
 
 int crypto_init() {
+  // set implementation here if you want to use custom random generator
+  // while it is not recommended
+  // https://download.libsodium.org/doc/advanced/custom_rng.html
+  // drawbacks:
+  //   1. not thread-safe
+  //   2. just a boilerplate for writing implementations for embedded operating systems
+  //   3. should rekey after fork() call
   if (-1 == sodium_init())
     return 1;
-  randombytes_set_implementation(&randombytes_salsa20_implementation);
-  randombytes_stir();
   return 0;
 }
 
