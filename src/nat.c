@@ -132,6 +132,35 @@ typedef struct {
   } \
 }
 
+#define FIX_CHECKSUM(iphdr, fcc) \
+do{ \
+  short sum = 0; \
+  int32_t verify = 0; \
+  verify = ((iphdr)->ver<<8)+ \
+  (iphdr)->tos+ \
+  htons((iphdr)->total_len)+ \
+  htons((iphdr)->id)+ \
+  htons((iphdr)->frag)+ \
+  ((iphdr)->ttl<<8)+ \
+  (iphdr)->proto+ \
+  htons((iphdr)->checksum)+ \
+  htons(((iphdr)->saddr>>16) & 0xffff)+ \
+  htons((iphdr)->saddr & 0xffff)+ \
+  htons(((iphdr)->daddr>>16) & 0xffff)+ \
+  htons((iphdr)->daddr & 0xffff); \
+  verify = (verify>>16) + (verify&0xffff); \
+  sum = ntohs(verify); \
+  logf("cksum verify:0x%x, checksum:%x", verify, sum); \
+  if(sum == -1){ \
+    (fcc) = 0; \
+  } else { \
+    (fcc) = sum<-1 ? -sum-1 : -sum; \
+    if((fcc) == 1 || (fcc) == -1){ \
+      (iphdr)->checksum += (fcc); \
+    } \
+  } \
+} while(0)
+
 int nat_fix_upstream(nat_ctx_t *ctx, unsigned char *buf, size_t buflen,
                      const struct sockaddr *addr, socklen_t addrlen) {
   uint8_t iphdr_len;
@@ -169,7 +198,10 @@ int nat_fix_upstream(nat_ctx_t *ctx, unsigned char *buf, size_t buflen,
 
   // add old, sub new
   acc = client->input_tun_ip - iphdr->saddr;
+
+  short fcc = 0;
   ADJUST_CHECKSUM(acc, iphdr->checksum);
+  FIX_CHECKSUM(iphdr, fcc);
 
   if (0 == (iphdr->frag & htons(0x1fff))) {
     // only adjust tcp & udp when frag offset == 0
@@ -181,6 +213,7 @@ int nat_fix_upstream(nat_ctx_t *ctx, unsigned char *buf, size_t buflen,
       }
       tcp_hdr_t *tcphdr = ip_payload;
       ADJUST_CHECKSUM(acc, tcphdr->checksum);
+      tcphdr->checksum += fcc;
     } else if (iphdr->proto == IPPROTO_UDP) {
       if (buflen < iphdr_len + 8) {
         errf("nat: udp packet too short");
@@ -188,6 +221,7 @@ int nat_fix_upstream(nat_ctx_t *ctx, unsigned char *buf, size_t buflen,
       }
       udp_hdr_t *udphdr = ip_payload;
       ADJUST_CHECKSUM(acc, udphdr->checksum);
+      udphdr->checksum += fcc;
     }
   }
   return 0;
@@ -234,7 +268,9 @@ int nat_fix_downstream(nat_ctx_t *ctx, unsigned char *buf, size_t buflen,
   // overwrite IP
   iphdr->daddr = client->input_tun_ip;
 
+  short fcc = 0;
   ADJUST_CHECKSUM(acc, iphdr->checksum);
+  FIX_CHECKSUM(iphdr, fcc);
 
   if (0 == (iphdr->frag & htons(0x1fff))) {
     // only adjust tcp & udp when frag offset == 0
@@ -246,6 +282,7 @@ int nat_fix_downstream(nat_ctx_t *ctx, unsigned char *buf, size_t buflen,
       }
       tcp_hdr_t *tcphdr = ip_payload;
       ADJUST_CHECKSUM(acc, tcphdr->checksum);
+      tcphdr->checksum += fcc;
     } else if (iphdr->proto == IPPROTO_UDP) {
       if (buflen < iphdr_len + 8) {
         errf("nat: udp packet too short");
@@ -253,6 +290,7 @@ int nat_fix_downstream(nat_ctx_t *ctx, unsigned char *buf, size_t buflen,
       }
       udp_hdr_t *udphdr = ip_payload;
       ADJUST_CHECKSUM(acc, udphdr->checksum);
+      udphdr->checksum += fcc;
     }
   }
   return 0;
